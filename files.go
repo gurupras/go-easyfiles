@@ -26,11 +26,18 @@ const (
 	DEFAULT_BUFSIZE = 4 * 1024 * 1024
 )
 
+type FileInterface interface {
+	io.Reader
+	io.Writer
+	io.Seeker
+	io.Closer
+}
+
 type File struct {
 	Path string
-	File *os.File
-	mode int
-	gz   FileType
+	File FileInterface
+	Mode int
+	Gz   FileType
 }
 
 type IWriter interface {
@@ -48,23 +55,23 @@ type Writer struct {
 func (f *File) fixMode() {
 	// First, the simple case
 	if strings.HasSuffix(f.Path, ".gz") {
-		f.gz = GZ_TRUE
+		f.Gz = GZ_TRUE
 	} else {
 		// Remember, all of this only occurs when gz is set to GZ_UNKNOWN
 		// So if a file is in write mode, has a non .gz suffix and is
 		// set to GZ_UNKNOWN, we're obviously going to give back a regular
 		// non-gz file
-		f.gz = GZ_FALSE
+		f.Gz = GZ_FALSE
 
 		// Try to get a reader to figure it out
-		if f.mode|os.O_RDONLY|os.O_RDWR != 0 {
+		if f.Mode|os.O_RDONLY|os.O_RDWR != 0 {
 			// We have read privilege..try to get a gzip reader
 			reader, err := gzip.NewReader(f.File)
 			if err == nil {
-				f.gz = GZ_TRUE
+				f.Gz = GZ_TRUE
 				defer reader.Close()
 			} else {
-				f.gz = GZ_FALSE
+				f.Gz = GZ_FALSE
 			}
 		}
 		// We can freely seek at this point
@@ -101,7 +108,7 @@ func (f *File) RawReader() (io.Reader, error) {
 	var reader io.Reader
 	var err error
 
-	switch f.gz {
+	switch f.Gz {
 	case GZ_TRUE:
 		gz_open = true
 	case GZ_FALSE:
@@ -142,7 +149,7 @@ func (f *File) Writer(bufsize int) (Writer, error) {
 	var writer IWriter
 	var err error
 
-	switch f.gz {
+	switch f.Gz {
 	case GZ_TRUE:
 		gz_open = true
 	case GZ_FALSE:
@@ -161,7 +168,7 @@ func (f *File) Writer(bufsize int) (Writer, error) {
 		// FIXME: Figure out why we're unable to wrap a gzipWriter with
 		// a bufio writer
 	}
-	return Writer{writer, f.gz}, err
+	return Writer{writer, f.Gz}, err
 }
 
 func (f *File) Close() {
