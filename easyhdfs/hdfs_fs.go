@@ -130,3 +130,15 @@ func (h *hdfsFileSystem) WriteFile(name string, b []byte, perm os.FileMode) erro
 	}
 	return nil
 }
+
+func (h *hdfsFileSystem) Remove(name string) error {
+	client, err := h.getClient()
+	if err != nil {
+		return err
+	}
+	return client.Remove(name)
+}
+
+func (h *hdfsFileSystem) RemoveAll(name string) error {
+	return h.Remove(name)
+}

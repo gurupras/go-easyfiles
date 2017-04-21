@@ -7,4 +7,6 @@ type FileSystemInterface interface {
 	Stat(string) (os.FileInfo, error)
 	ReadFile(string) ([]byte, error)
 	WriteFile(string, []byte, os.FileMode) error
+	Remove(string) error
+	RemoveAll(string) error
 }

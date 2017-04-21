@@ -10,18 +10,26 @@ type localFileSystem struct {
 
 var LocalFS = localFileSystem{}
 
-func (l localFileSystem) Open(path string, mode int, gz FileType) (*File, error) {
-	return Open(path, mode, gz)
+func (l localFileSystem) Open(name string, mode int, gz FileType) (*File, error) {
+	return Open(name, mode, gz)
 }
 
-func (l localFileSystem) Stat(path string) (os.FileInfo, error) {
-	return os.Stat(path)
+func (l localFileSystem) Stat(name string) (os.FileInfo, error) {
+	return os.Stat(name)
 }
 
-func (l localFileSystem) ReadFile(path string) ([]byte, error) {
-	return ioutil.ReadFile(path)
+func (l localFileSystem) ReadFile(name string) ([]byte, error) {
+	return ioutil.ReadFile(name)
 }
 
-func (l localFileSystem) WriteFile(path string, b []byte, perm os.FileMode) error {
-	return ioutil.WriteFile(path, b, perm)
+func (l localFileSystem) WriteFile(name string, b []byte, perm os.FileMode) error {
+	return ioutil.WriteFile(name, b, perm)
+}
+
+func (l localFileSystem) Remove(name string) error {
+	return os.Remove(name)
+}
+
+func (l localFileSystem) RemoveAll(name string) error {
+	return os.RemoveAll(name)
 }
