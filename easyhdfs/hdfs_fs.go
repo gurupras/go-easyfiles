@@ -6,6 +6,7 @@ import (
 
 	"github.com/colinmarc/hdfs"
 	"github.com/gurupras/go-easyfiles"
+	"github.com/gurupras/go-hdfs-doublestar"
 	log "github.com/sirupsen/logrus"
 )
 
@@ -141,4 +142,36 @@ func (h *hdfsFileSystem) Remove(name string) error {
 
 func (h *hdfsFileSystem) RemoveAll(name string) error {
 	return h.Remove(name)
+}
+
+func (h *hdfsFileSystem) Makedirs(name string) error {
+	client, err := h.getClient()
+	if err != nil {
+		return err
+	}
+	return client.MkdirAll(name, 0775)
+}
+
+func (h *hdfsFileSystem) Exists(name string) (bool, error) {
+	client, err := h.getClient()
+	if err != nil {
+		return false, err
+	}
+	stat, err := client.Stat(name)
+	if err != nil {
+		return false, err
+	}
+	if stat != nil {
+		return true, nil
+	} else {
+		return false, nil
+	}
+}
+
+func (h *hdfsFileSystem) Glob(pattern string) ([]string, error) {
+	client, err := h.getClient()
+	if err != nil {
+		return nil, err
+	}
+	return hdfs_doublestar.Glob(client, pattern)
 }

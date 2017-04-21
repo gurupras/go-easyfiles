@@ -3,6 +3,8 @@ package easyfiles
 import (
 	"io/ioutil"
 	"os"
+
+	"github.com/bmatcuk/doublestar"
 )
 
 type localFileSystem struct {
@@ -32,4 +34,16 @@ func (l localFileSystem) Remove(name string) error {
 
 func (l localFileSystem) RemoveAll(name string) error {
 	return os.RemoveAll(name)
+}
+
+func (l localFileSystem) Makedirs(name string) error {
+	return Makedirs(name)
+}
+
+func (l localFileSystem) Exists(name string) (bool, error) {
+	return Exists(name), nil
+}
+
+func (l localFileSystem) Glob(pattern string) ([]string, error) {
+	return doublestar.Glob(pattern)
 }

@@ -9,4 +9,7 @@ type FileSystemInterface interface {
 	WriteFile(string, []byte, os.FileMode) error
 	Remove(string) error
 	RemoveAll(string) error
+	Makedirs(string) error
+	Exists(string) (bool, error)
+	Glob(string) ([]string, error)
 }
