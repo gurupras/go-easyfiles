@@ -256,6 +256,7 @@ func Exists(path string) bool {
 		return true
 	} else {
 		return os.IsExist(err)
+
 	}
 }
 

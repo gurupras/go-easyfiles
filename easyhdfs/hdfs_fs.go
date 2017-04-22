@@ -31,11 +31,7 @@ func (h *hdfsFileSystem) Open(path string, mode int, gz easyfiles.FileType) (*ea
 	if err != nil {
 		return nil, err
 	}
-	// First, make sure gz is not UNKNOWN. We don't run the usual .gz extension tests
-	// that exist in easyfiles.Open(). Thus we only handle GZ_(TRUE|FALSE)
-	if gz == easyfiles.GZ_UNKNOWN {
-		return nil, fmt.Errorf("easyhdfs cannot handle GZ_UNKNOWN. Must be GZ_TRUE or GZ_FALSE.")
-	}
+
 	hdfsFile := &HdfsFile{path, nil, nil, client}
 	// Check if file exists
 	// If a file does not exist, this throws an error
@@ -93,6 +89,8 @@ func (h *hdfsFileSystem) Open(path string, mode int, gz easyfiles.FileType) (*ea
 		hdfsFile.Writer = w
 	}
 	file := &easyfiles.File{path, hdfsFile, mode, gz}
+	// Now make sure you fix GZ_UNKNOWN if it is GZ_UNKNOWN
+	file.FixMode()
 	return file, nil
 }
 
@@ -101,7 +99,14 @@ func (h *hdfsFileSystem) Stat(name string) (os.FileInfo, error) {
 	if err != nil {
 		return nil, err
 	}
-	return client.Stat(name)
+	info, err := client.Stat(name)
+	if err != nil {
+		return nil, nil
+	} else if info == nil {
+		return nil, nil
+	} else {
+		return info, nil
+	}
 }
 
 func (h *hdfsFileSystem) ReadFile(name string) ([]byte, error) {
@@ -153,18 +158,13 @@ func (h *hdfsFileSystem) Makedirs(name string) error {
 }
 
 func (h *hdfsFileSystem) Exists(name string) (bool, error) {
-	client, err := h.getClient()
+	info, err := h.Stat(name)
 	if err != nil {
 		return false, err
-	}
-	stat, err := client.Stat(name)
-	if err != nil {
-		return false, err
-	}
-	if stat != nil {
-		return true, nil
-	} else {
+	} else if info == nil {
 		return false, nil
+	} else {
+		return true, nil
 	}
 }
 

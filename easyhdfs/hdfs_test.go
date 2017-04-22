@@ -29,13 +29,3 @@ func TestReadDir(t *testing.T) {
 	require.NotNil(files)
 	require.NotZero(len(files))
 }
-
-func TestRecursiveList(t *testing.T) {
-	require := require.New(t)
-
-	client := testClient(require)
-
-	files, err := RecursiveList(client, "/", "i*json")
-	require.Nil(err)
-	require.NotZero(len(files))
-}
