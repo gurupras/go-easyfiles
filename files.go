@@ -52,7 +52,7 @@ type Writer struct {
 	gz FileType
 }
 
-func (f *File) fixMode() {
+func (f *File) FixMode() {
 	// First, the simple case
 	if strings.HasSuffix(f.Path, ".gz") {
 		f.Gz = GZ_TRUE
@@ -187,7 +187,7 @@ func Open(filepath string, mode int, gz FileType) (*File, error) {
 	if err == nil {
 		retfile = &File{filepath, file, mode, gz}
 		if gz == GZ_UNKNOWN {
-			retfile.fixMode()
+			retfile.FixMode()
 		}
 	}
 	return retfile, err
