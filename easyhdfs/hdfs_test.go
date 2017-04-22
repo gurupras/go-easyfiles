@@ -1,14 +1,18 @@
 package easyhdfs
 
 import (
+	"strings"
 	"testing"
 
 	"github.com/colinmarc/hdfs"
 	"github.com/stretchr/testify/require"
 )
 
-func testClient(require *require.Assertions) *hdfs.Client {
-	client, err := hdfs.New("dirtydeeds.cse.buffalo.edu:9000")
+func testClient(t *testing.T, require *require.Assertions) *hdfs.Client {
+	if strings.Compare(*hdfsAddr, "") == 0 {
+		t.Skip("Skipping test since no HDFS address was specified")
+	}
+	client, err := hdfs.New(*hdfsAddr)
 	require.Nil(err)
 	require.NotNil(client)
 	return client
@@ -16,13 +20,13 @@ func testClient(require *require.Assertions) *hdfs.Client {
 
 func TestConnect(t *testing.T) {
 	require := require.New(t)
-	_ = testClient(require)
+	_ = testClient(t, require)
 }
 
 func TestReadDir(t *testing.T) {
 	require := require.New(t)
 
-	client := testClient(require)
+	client := testClient(t, require)
 
 	files, err := client.ReadDir("/")
 	require.Nil(err)

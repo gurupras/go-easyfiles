@@ -9,7 +9,6 @@ import (
 	"testing"
 
 	"github.com/gurupras/go-easyfiles"
-	log "github.com/sirupsen/logrus"
 )
 
 // These tests are copied from os_test.go
@@ -203,8 +202,6 @@ func TestHDFSAppend(t *testing.T) {
 	if strings.Compare(*hdfsAddr, "") == 0 {
 		t.Skip(fmt.Sprintf("HDFS address not specified"))
 	}
-
-	log.SetLevel(log.DebugLevel)
 
 	fs := NewHDFSFileSystem(*hdfsAddr)
 	testAppend(t, fs)
