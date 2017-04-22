@@ -3,36 +3,90 @@ package easyhdfs
 import (
 	"fmt"
 	"os"
+	"sync"
 
 	"github.com/colinmarc/hdfs"
+	"github.com/fatih/set"
 	"github.com/gurupras/go-easyfiles"
 	"github.com/gurupras/go-hdfs-doublestar"
+	"github.com/gurupras/gocommons/gsync"
 	log "github.com/sirupsen/logrus"
 )
 
-type hdfsFileSystem struct {
-	Addr string
+const DEFAULT_POOL_SIZE = 16
+
+type Pool struct {
+	sync.Mutex
+	size int
+	*gsync.Semaphore
+	pool set.Interface
 }
 
-func NewHDFSFileSystem(addr string) *hdfsFileSystem {
-	return &hdfsFileSystem{addr}
+func NewPool(elements ...interface{}) *Pool {
+	p := &Pool{}
+	p.size = len(elements)
+	p.pool = set.New()
+	p.Semaphore = gsync.NewSem(p.size)
+	p.pool.Add(elements...)
+	return p
 }
 
-func (h *hdfsFileSystem) getClient() (*hdfs.Client, error) {
-	client, err := hdfs.New(h.Addr)
-	if err != nil {
-		return nil, fmt.Errorf("Failed to connect to HDFS at address '%v': %v", h.Addr, err)
+func (p *Pool) get() interface{} {
+	p.P()
+	p.Lock()
+	defer p.Unlock()
+	return p.pool.Pop()
+}
+
+func (p *Pool) put(obj interface{}) {
+	p.Lock()
+	defer p.Unlock()
+	p.pool.Add(obj)
+	p.V()
+}
+
+type HDFSFileSystem struct {
+	Addr       string
+	clientPool *Pool
+}
+
+func NewHDFSFileSystem(addr string, poolSize ...int) *HDFSFileSystem {
+	fs := &HDFSFileSystem{addr, nil}
+	size := DEFAULT_POOL_SIZE
+	if len(poolSize) > 0 && poolSize[0] > 1 {
+		size = poolSize[0]
 	}
+	log.Infof("Creating pool of size: %v", size)
+	clients := make([]interface{}, size)
+	for idx := 0; idx < size; idx++ {
+		client, err := hdfs.New(addr)
+		if err != nil {
+			log.Errorf("Failed to connect to HDFS at address '%v': %v", addr, err)
+			return nil
+		}
+		clients[idx] = client
+	}
+	pool := NewPool(clients...)
+	fs.clientPool = pool
+	return fs
+}
+
+func (h *HDFSFileSystem) getClient() (*hdfs.Client, error) {
+	client := h.clientPool.get().(*hdfs.Client)
 	return client, nil
 }
 
-func (h *hdfsFileSystem) Open(path string, mode int, gz easyfiles.FileType) (*easyfiles.File, error) {
+func (h *HDFSFileSystem) putClient(obj interface{}) {
+	h.clientPool.put(obj)
+}
+
+func (h *HDFSFileSystem) Open(path string, mode int, gz easyfiles.FileType) (*easyfiles.File, error) {
 	client, err := h.getClient()
 	if err != nil {
 		return nil, err
 	}
 
-	hdfsFile := &HdfsFile{path, nil, nil, client}
+	hFile := &hdfsFile{path, nil, nil, client, h}
 	// Check if file exists
 	// If a file does not exist, this throws an error
 	stat, err := client.Stat(path)
@@ -76,7 +130,7 @@ func (h *hdfsFileSystem) Open(path string, mode int, gz easyfiles.FileType) (*ea
 	if err != nil {
 		return nil, fmt.Errorf("%v", err)
 	}
-	hdfsFile.FileReader = f
+	hFile.FileReader = f
 
 	if mode&os.O_WRONLY > 0 || mode&os.O_RDWR > 0 {
 		// We don't need to check for O_APPEND, because that's
@@ -86,19 +140,21 @@ func (h *hdfsFileSystem) Open(path string, mode int, gz easyfiles.FileType) (*ea
 		if err != nil {
 			return nil, fmt.Errorf("%v", err)
 		}
-		hdfsFile.Writer = w
+		hFile.Writer = w
 	}
-	file := &easyfiles.File{path, hdfsFile, mode, gz}
+	file := &easyfiles.File{path, hFile, mode, gz}
 	// Now make sure you fix GZ_UNKNOWN if it is GZ_UNKNOWN
 	file.FixMode()
 	return file, nil
 }
 
-func (h *hdfsFileSystem) Stat(name string) (os.FileInfo, error) {
+func (h *HDFSFileSystem) Stat(name string) (os.FileInfo, error) {
 	client, err := h.getClient()
 	if err != nil {
 		return nil, err
 	}
+	defer h.putClient(client)
+
 	info, err := client.Stat(name)
 	if err != nil {
 		return nil, nil
@@ -109,15 +165,17 @@ func (h *hdfsFileSystem) Stat(name string) (os.FileInfo, error) {
 	}
 }
 
-func (h *hdfsFileSystem) ReadFile(name string) ([]byte, error) {
+func (h *HDFSFileSystem) ReadFile(name string) ([]byte, error) {
 	client, err := h.getClient()
 	if err != nil {
 		return nil, err
 	}
+	defer h.putClient(client)
+
 	return client.ReadFile(name)
 }
 
-func (h *hdfsFileSystem) WriteFile(name string, b []byte, perm os.FileMode) error {
+func (h *HDFSFileSystem) WriteFile(name string, b []byte, perm os.FileMode) error {
 	f, err := h.Open(name, os.O_CREATE|os.O_TRUNC|os.O_WRONLY, easyfiles.GZ_FALSE)
 	if err != nil {
 		return err
@@ -137,27 +195,29 @@ func (h *hdfsFileSystem) WriteFile(name string, b []byte, perm os.FileMode) erro
 	return nil
 }
 
-func (h *hdfsFileSystem) Remove(name string) error {
+func (h *HDFSFileSystem) Remove(name string) error {
 	client, err := h.getClient()
 	if err != nil {
 		return err
 	}
+	defer h.putClient(client)
 	return client.Remove(name)
 }
 
-func (h *hdfsFileSystem) RemoveAll(name string) error {
+func (h *HDFSFileSystem) RemoveAll(name string) error {
 	return h.Remove(name)
 }
 
-func (h *hdfsFileSystem) Makedirs(name string) error {
+func (h *HDFSFileSystem) Makedirs(name string) error {
 	client, err := h.getClient()
 	if err != nil {
 		return err
 	}
+	defer h.putClient(client)
 	return client.MkdirAll(name, 0775)
 }
 
-func (h *hdfsFileSystem) Exists(name string) (bool, error) {
+func (h *HDFSFileSystem) Exists(name string) (bool, error) {
 	info, err := h.Stat(name)
 	if err != nil {
 		return false, err
@@ -168,10 +228,11 @@ func (h *hdfsFileSystem) Exists(name string) (bool, error) {
 	}
 }
 
-func (h *hdfsFileSystem) Glob(pattern string) ([]string, error) {
+func (h *HDFSFileSystem) Glob(pattern string) ([]string, error) {
 	client, err := h.getClient()
 	if err != nil {
 		return nil, err
 	}
+	defer h.putClient(client)
 	return hdfs_doublestar.Glob(client, pattern)
 }

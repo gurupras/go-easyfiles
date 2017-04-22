@@ -21,17 +21,17 @@ var (
 	hdfsPath = flag.String("hdfs-path", "/test", "Base path under which serialization is tested")
 )
 
-func getHDFS(t *testing.T) easyfiles.FileSystemInterface {
+func getHDFS(t *testing.T, poolSize int) easyfiles.FileSystemInterface {
 	if strings.Compare(*hdfsAddr, "") == 0 {
 		t.Skip(fmt.Sprintf("HDFS address not specified"))
 	}
 
-	fs := NewHDFSFileSystem(*hdfsAddr)
+	fs := NewHDFSFileSystem(*hdfsAddr, poolSize)
 	return fs
 }
 func TestHDFSStatNonExisting(t *testing.T) {
 	require := require.New(t)
-	fs := getHDFS(t)
+	fs := getHDFS(t, 16)
 
 	file := "/test/test-hdfs-stat"
 
@@ -42,7 +42,7 @@ func TestHDFSStatNonExisting(t *testing.T) {
 
 func TestHDFSStatExisting(t *testing.T) {
 	require := require.New(t)
-	fs := getHDFS(t)
+	fs := getHDFS(t, 16)
 
 	file := "/test/test-hdfs-stat-existing"
 	f, err := fs.Open(file, os.O_CREATE|os.O_TRUNC|os.O_WRONLY, easyfiles.GZ_UNKNOWN)
@@ -58,7 +58,7 @@ func TestHDFSStatExisting(t *testing.T) {
 
 func TestHDFSOpenCreate(t *testing.T) {
 	require := require.New(t)
-	fs := getHDFS(t)
+	fs := getHDFS(t, 16)
 
 	file := "/test/hdfs-create"
 	exists, err := fs.Exists(file)
@@ -99,12 +99,13 @@ func TestHDFSOpenCreate(t *testing.T) {
 
 func TestManyFilesWriter(t *testing.T) {
 	require := require.New(t)
-	fs := getHDFS(t)
 
 	// Generate some random data of a few MB
 	size := 11 * 1024 * 1024 // 11MB
-
 	numFiles := 20
+
+	// FIXME: We should be able to pass this test with just numFiles pool size
+	fs := getHDFS(t, numFiles*2)
 
 	buf := make([]byte, size)
 	rand.Read(buf)
@@ -156,6 +157,7 @@ func TestManyFilesWriter(t *testing.T) {
 			file := files[idx]
 			f, err := fs.Open(file, os.O_RDONLY, easyfiles.GZ_TRUE)
 			require.Nil(err)
+			defer f.Close()
 
 			got := bytes.NewBuffer(nil)
 			reader, err := f.RawReader()
