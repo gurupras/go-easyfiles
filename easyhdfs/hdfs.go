@@ -5,12 +5,8 @@ import "github.com/colinmarc/hdfs"
 type HdfsFile struct {
 	Path string
 	*hdfs.FileReader
-	Writer *hdfs.FileWriter
+	*hdfs.FileWriter
 	Client *hdfs.Client
-}
-
-func (f *HdfsFile) Write(b []byte) (int, error) {
-	return f.Writer.Write(b)
 }
 
 func (f *HdfsFile) Close() error {
@@ -20,8 +16,8 @@ func (f *HdfsFile) Close() error {
 			return err
 		}
 	}
-	if f.Writer != nil {
-		return f.Writer.Close()
+	if f.FileWriter != nil {
+		return f.FileWriter.Close()
 	}
 	return nil
 }

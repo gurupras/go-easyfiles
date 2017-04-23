@@ -11,19 +11,21 @@ import (
 )
 
 type hdfsFileSystem struct {
-	Addr string
+	client *hdfs.Client
 }
 
 func NewHDFSFileSystem(addr string) *hdfsFileSystem {
-	return &hdfsFileSystem{addr}
+	client, err := hdfs.New(addr)
+	if err != nil {
+		log.Fatalf("Failed to get HDFS client: %v", err)
+		return nil
+	}
+	fs := &hdfsFileSystem{client}
+	return fs
 }
 
 func (h *hdfsFileSystem) getClient() (*hdfs.Client, error) {
-	client, err := hdfs.New(h.Addr)
-	if err != nil {
-		return nil, fmt.Errorf("Failed to connect to HDFS at address '%v': %v", h.Addr, err)
-	}
-	return client, nil
+	return h.client, nil
 }
 
 func (h *hdfsFileSystem) Open(path string, mode int, gz easyfiles.FileType) (*easyfiles.File, error) {
@@ -86,7 +88,7 @@ func (h *hdfsFileSystem) Open(path string, mode int, gz easyfiles.FileType) (*ea
 		if err != nil {
 			return nil, fmt.Errorf("%v", err)
 		}
-		hdfsFile.Writer = w
+		hdfsFile.FileWriter = w
 	}
 	file := &easyfiles.File{path, hdfsFile, mode, gz}
 	// Now make sure you fix GZ_UNKNOWN if it is GZ_UNKNOWN

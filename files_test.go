@@ -77,7 +77,7 @@ func WriteGzTest(assert *assert.Assertions, bufsize int) {
 	var success bool
 	var err error
 	var f *File
-	var writer Writer
+	var writer *Writer
 
 	f, err = Open(fmt.Sprintf("/tmp/write-gz-%d.gz", bufsize), os.O_WRONLY|os.O_CREATE|os.O_TRUNC, GZ_TRUE)
 	assert.Nil(err, "Failed to open valid file", err)

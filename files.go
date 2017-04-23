@@ -95,6 +95,10 @@ func (w *Writer) Flush() (err error) {
 }
 
 func (w *Writer) Close() (err error) {
+	err = w.IWriter.Flush()
+	if err != nil {
+		return err
+	}
 	if w.gz == GZ_TRUE {
 		if v, ok := w.IWriter.(*gzip.Writer); ok {
 			err = v.Close()
@@ -144,7 +148,7 @@ func (f *File) Reader(bufsize int) (*bufio.Scanner, error) {
 	return scanner, err
 }
 
-func (f *File) Writer(bufsize int) (Writer, error) {
+func (f *File) Writer(bufsize int) (*Writer, error) {
 	gz_open := false
 	var writer IWriter
 	var err error
@@ -168,11 +172,11 @@ func (f *File) Writer(bufsize int) (Writer, error) {
 		// FIXME: Figure out why we're unable to wrap a gzipWriter with
 		// a bufio writer
 	}
-	return Writer{writer, f.Gz}, err
+	return &Writer{writer, f.Gz}, err
 }
 
-func (f *File) Close() {
-	f.File.Close()
+func (f *File) Close() error {
+	return f.File.Close()
 }
 
 func (f *File) Seek(offset int64, whence int) (int64, error) {

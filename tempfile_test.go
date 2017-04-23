@@ -65,7 +65,7 @@ func TestLargeTempFile(t *testing.T) {
 
 	fn := func() {
 		defer wg.Done()
-		for i := 0; i < 500; i++ {
+		for i := 0; i < 50; i++ {
 			tmpFile, err = TempFile(f, "temp-", ".test")
 			tmpFile.Close()
 			assert.Nil(err, "Failed to create temp file")
