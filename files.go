@@ -16,6 +16,18 @@ import (
 
 type FileType int
 
+func (f FileType) String() string {
+	switch f {
+	case GZ_TRUE:
+		return "GZ_TRUE"
+	case GZ_FALSE:
+		return "GZ_FALSE"
+	case GZ_UNKNOWN:
+		return "GZ_UNKNOWN"
+	}
+	panic("Shouldn't be here")
+}
+
 const (
 	GZ_TRUE    FileType = 1
 	GZ_FALSE   FileType = 0
