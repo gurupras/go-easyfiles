@@ -52,14 +52,19 @@ type File struct {
 	Gz   FileType
 }
 
-type IWriter interface {
-	Write(bytes []byte) (int, error)
-	Reset(w io.Writer)
+type Flusher interface {
 	Flush() error
+}
+
+type IWriter interface {
+	io.Writer
+	Reset(w io.Writer)
+	Flusher
 	//Close() error
 }
 
 type Writer struct {
+	writer *Writer
 	IWriter
 	gz FileType
 }
@@ -100,6 +105,10 @@ func (w *Writer) Flush() (err error) {
 		if v, ok := w.IWriter.(*gzip.Writer); ok {
 			return v.Flush()
 		}
+	}
+	// Flush any underlying writer
+	if w.writer != nil {
+		w.writer.Flush()
 	}
 	v, _ := w.IWriter.(*bufio.Writer)
 	err = v.Flush()
@@ -162,7 +171,8 @@ func (f *File) Reader(bufsize int) (*bufio.Scanner, error) {
 
 func (f *File) Writer(bufsize int) (*Writer, error) {
 	gz_open := false
-	var writer IWriter
+	var iWriter IWriter
+	var writer *Writer
 	var err error
 
 	switch f.Gz {
@@ -174,17 +184,17 @@ func (f *File) Writer(bufsize int) (*Writer, error) {
 		panic("Should not have occured..mode should have been fixed on open")
 	}
 
-	if gz_open == true {
-		writer = gzip.NewWriter(f.File)
-	} else {
-		writer = bufio.NewWriter(f.File)
+	if bufsize != 0 {
+		writer = &Writer{nil, bufio.NewWriterSize(f.File, bufsize), f.Gz}
 	}
 
-	if bufsize != 0 {
-		// FIXME: Figure out why we're unable to wrap a gzipWriter with
-		// a bufio writer
+	if gz_open == true {
+		iWriter = gzip.NewWriter(f.File)
+	} else {
+		iWriter = bufio.NewWriter(f.File)
 	}
-	return &Writer{writer, f.Gz}, err
+
+	return &Writer{writer, iWriter, f.Gz}, err
 }
 
 func (f *File) Close() error {

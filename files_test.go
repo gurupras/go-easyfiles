@@ -2,7 +2,11 @@ package easyfiles
 
 import (
 	"bufio"
+	"bytes"
+	"compress/gzip"
 	"fmt"
+	"io"
+	mrand "math/rand"
 	"os"
 	"path"
 	"path/filepath"
@@ -11,36 +15,32 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
-func CheckFileContentsMatch(f *File, contents string, expected bool, bufsize int) (bool, error) {
+func CheckFileContentsMatch(f *File, contents []byte, expected bool, bufsize int) (bool, error) {
 	var err error
 	var match bool
-	scanner, err := f.Reader(bufsize)
+
+	buf := bytes.NewBuffer(nil)
+
+	reader, err := f.RawReader()
 	if err != nil {
 		return !expected, err
 	}
-	buf := make([]byte, 64*1024)
-	scanner.Buffer(buf, 1024*1024)
-	s := ""
 
-	scanner.Split(bufio.ScanLines)
-
-	for scanner.Scan() {
-		s += scanner.Text()
-	}
-
-	if err := scanner.Err(); err != nil {
+	_, err = io.Copy(buf, reader)
+	if err != nil {
 		return !expected, err
 	}
 
-	if s != contents {
+	if bytes.Compare(buf.Bytes(), contents) != 0 {
 		match = false
 	} else {
 		match = true
 	}
 	if match != expected {
-		return false, err
+		return false, fmt.Errorf("Expected: %v\nGot:      %v\n", contents, buf.Bytes())
 	} else {
 		return true, err
 	}
@@ -59,7 +59,7 @@ func TestOpenGzFalse(t *testing.T) {
 	f, err = Open("test/open-test.txt", os.O_RDONLY, GZ_FALSE)
 	assert.Nil(err, "Failed to open valid file", err)
 
-	success, err = CheckFileContentsMatch(f, "Hello World", true, 0)
+	success, err = CheckFileContentsMatch(f, []byte("Hello World\n"), true, 0)
 	if err != nil || !success {
 		assert.Fail(fmt.Sprintf("Failed to verify file contents: %v", err))
 	}
@@ -67,7 +67,7 @@ func TestOpenGzFalse(t *testing.T) {
 	// Should succeed
 	f, err = Open("test/open-test.gz", os.O_RDONLY, GZ_FALSE)
 	assert.Nil(err, "Failed to open valid file", err)
-	success, err = CheckFileContentsMatch(f, "Hello World", false, 0)
+	success, err = CheckFileContentsMatch(f, []byte("Hello World\n"), false, 0)
 	if err == nil && !success {
 		assert.Fail(fmt.Sprintf("Failed to verify file contents: %v", err))
 	}
@@ -79,6 +79,10 @@ func WriteGzTest(assert *assert.Assertions, bufsize int) {
 	var f *File
 	var writer *Writer
 
+	// Random data size of 4-32MB
+	dataSize := 64*1024 + mrand.Int31n(4*1024*1024)
+	data := RandomData(int(dataSize))
+
 	f, err = Open(fmt.Sprintf("/tmp/write-gz-%d.gz", bufsize), os.O_WRONLY|os.O_CREATE|os.O_TRUNC, GZ_TRUE)
 	assert.Nil(err, "Failed to open valid file", err)
 	defer f.Close()
@@ -86,7 +90,7 @@ func WriteGzTest(assert *assert.Assertions, bufsize int) {
 	writer, err = f.Writer(bufsize)
 	assert.Nil(err, "Failed to get writer to file", err)
 
-	writer.Write([]byte("Hello World"))
+	writer.Write(data)
 	writer.Flush()
 	writer.Close()
 	f.Close()
@@ -94,7 +98,7 @@ func WriteGzTest(assert *assert.Assertions, bufsize int) {
 	f, err = Open(f.Path, os.O_RDONLY, GZ_TRUE)
 	assert.Nil(err, "Failed to open valid file", err)
 
-	if success, err = CheckFileContentsMatch(f, "Hello World", true, bufsize); err != nil || !success {
+	if success, err = CheckFileContentsMatch(f, data, true, bufsize); err != nil || !success {
 		assert.Fail(fmt.Sprintf("Failed to verify file contents: %v", err))
 	}
 	f.Close()
@@ -113,7 +117,7 @@ func TestWriteGz(t *testing.T) {
 		WriteGzTest(assert, bufsize)
 	}
 
-	for i := 2; i < 16*1024*1024; i *= 4 {
+	for i := 2; i < 1024*1024; i *= 4 {
 		wg.Add(1)
 		go wt(i)
 	}
@@ -136,7 +140,7 @@ func FlushTest(assert *assert.Assertions, bufsize int) {
 	writer.Close()
 
 	f.Seek(0, 0)
-	if success, err = CheckFileContentsMatch(f, "stuff", true, bufsize); err != nil || !success {
+	if success, err = CheckFileContentsMatch(f, []byte("stuff"), true, bufsize); err != nil || !success {
 		assert.Fail(fmt.Sprintf("Failed to verify file contents: %v", err))
 	}
 	os.Remove(f.Path)
@@ -152,7 +156,7 @@ func FlushTest(assert *assert.Assertions, bufsize int) {
 	writer.Close()
 
 	f.Seek(0, 0)
-	if success, err = CheckFileContentsMatch(f, "stuff", true, bufsize); err != nil || !success {
+	if success, err = CheckFileContentsMatch(f, []byte("stuff"), true, bufsize); err != nil || !success {
 		assert.Fail(fmt.Sprintf("Failed to verify file contents: %v", err))
 	}
 	os.Remove(f.Path)
@@ -168,7 +172,7 @@ func FlushTest(assert *assert.Assertions, bufsize int) {
 	writer.Close()
 
 	f.Seek(0, 0)
-	if success, err = CheckFileContentsMatch(f, "stuff", true, bufsize); err != nil || !success {
+	if success, err = CheckFileContentsMatch(f, []byte("stuff"), true, bufsize); err != nil || !success {
 		assert.Fail(fmt.Sprintf("Failed to verify file contents: %v", err))
 	}
 	os.Remove(f.Path)
@@ -184,7 +188,7 @@ func FlushTest(assert *assert.Assertions, bufsize int) {
 	writer.Close()
 
 	f.Seek(0, 0)
-	if success, err = CheckFileContentsMatch(f, "stuff", true, bufsize); err != nil || !success {
+	if success, err = CheckFileContentsMatch(f, []byte("stuff"), true, bufsize); err != nil || !success {
 		assert.Fail(fmt.Sprintf("Failed to verify file contents: %v", err))
 	}
 	os.Remove(f.Path)
@@ -223,7 +227,7 @@ func TestOpenGzTrue(t *testing.T) {
 	f, err = Open("test/open-test.gz", os.O_RDONLY, GZ_TRUE)
 	assert.Nil(err, "Failed to open valid file")
 
-	success, err = CheckFileContentsMatch(f, "Hello World", true, 0)
+	success, err = CheckFileContentsMatch(f, []byte("Hello World\n"), true, 0)
 	if err != nil || !success {
 		assert.Fail(fmt.Sprintf("Failed to verify file contents: %v", err))
 	}
@@ -232,7 +236,7 @@ func TestOpenGzTrue(t *testing.T) {
 	f, err = Open("test/open-test.txt", os.O_RDONLY, GZ_TRUE)
 	assert.Nil(err, "Failed to open valid file")
 
-	success, err = CheckFileContentsMatch(f, "Hello World", false, 0)
+	success, err = CheckFileContentsMatch(f, []byte("Hello World"), false, 0)
 	if err == nil && !success {
 		assert.Fail("Should have failed to verify file contents")
 	}
@@ -251,7 +255,7 @@ func TestOpenGzUnknown(t *testing.T) {
 	f, err = Open("test/open-test.gz", os.O_RDONLY, GZ_UNKNOWN)
 	assert.Nil(err, "Failed to open valid file", err)
 
-	success, err = CheckFileContentsMatch(f, "Hello World", true, 0)
+	success, err = CheckFileContentsMatch(f, []byte("Hello World\n"), true, 0)
 	if err != nil || !success {
 		assert.Fail(fmt.Sprintf("Failed to verify file contents: %v", err))
 	}
@@ -260,7 +264,7 @@ func TestOpenGzUnknown(t *testing.T) {
 	f, err = Open("test/open-test.txt", os.O_RDONLY, GZ_UNKNOWN)
 	assert.Nil(err, "Failed to open valid file", err)
 
-	success, err = CheckFileContentsMatch(f, "Hello World", true, 0)
+	success, err = CheckFileContentsMatch(f, []byte("Hello World\n"), true, 0)
 	if err != nil || !success {
 		assert.Fail(fmt.Sprintf("Failed to verify file contents: %v", err))
 	}
@@ -269,7 +273,7 @@ func TestOpenGzUnknown(t *testing.T) {
 	f, err = Open("test/open-test.gz", os.O_RDONLY, GZ_UNKNOWN)
 	assert.Nil(err, "Failed to open valid file", err)
 
-	success, err = CheckFileContentsMatch(f, "Hello World", true, 0)
+	success, err = CheckFileContentsMatch(f, []byte("Hello World\n"), true, 0)
 	if err != nil || !success {
 		assert.Fail(fmt.Sprintf("Failed to verify file contents: %v", err))
 	}
@@ -278,7 +282,7 @@ func TestOpenGzUnknown(t *testing.T) {
 	f, err = Open("test/open-gz-no-ext", os.O_RDONLY, GZ_UNKNOWN)
 	assert.Nil(err, "Failed to open valid file", err)
 
-	success, err = CheckFileContentsMatch(f, "Hello World", true, 0)
+	success, err = CheckFileContentsMatch(f, []byte("Hello World\n"), true, 0)
 	if err != nil || !success {
 		assert.Fail(fmt.Sprintf("Failed to verify file contents: %v", err))
 	}
@@ -287,7 +291,7 @@ func TestOpenGzUnknown(t *testing.T) {
 	f, err = Open("test/open-test.fake.gz", os.O_RDONLY, GZ_UNKNOWN)
 	assert.Nil(err, "Failed to open valid file", err)
 
-	success, err = CheckFileContentsMatch(f, "Hello World", true, 0)
+	success, err = CheckFileContentsMatch(f, []byte("Hello World\n"), true, 0)
 	if err == nil || success {
 		assert.Fail(fmt.Sprintf("Should have failed to verify file contents: %v", err))
 	}
@@ -396,4 +400,98 @@ func TestMakedirs(t *testing.T) {
 	path = "/please/dont/allow/directory/creation/in/root"
 	err = Makedirs(path)
 	assert.NotNil(err, "Should have failed")
+}
+
+func RandomData(size int) []byte {
+	characters := "abcdefghijklmnopqrstuvwxyz1234567890"
+	limit := int32(len(characters))
+	ret := make([]byte, size)
+	for idx := 0; idx < size; idx++ {
+		charIdx := mrand.Int31n(limit)
+		ret[idx] = characters[charIdx]
+	}
+	return ret
+}
+
+func testWriter(t *testing.T, fileType FileType) {
+	require := require.New(t)
+
+	basename := fmt.Sprintf("/tmp/writer-test-%v-", fileType.String())
+
+	wg := sync.WaitGroup{}
+	for bufSize := 32; bufSize < 256*1024; bufSize *= 2 {
+		wg.Add(1)
+		go func(bufSize int) {
+			defer wg.Done()
+			fname := fmt.Sprintf("%v%08d", basename, bufSize)
+			f, err := Open(fname, os.O_CREATE|os.O_TRUNC|os.O_WRONLY, fileType)
+			require.Nil(err)
+			defer os.Remove(fname)
+
+			w, err := f.Writer(bufSize)
+			require.Nil(err)
+
+			dataSize := 32*1024 + mrand.Int31n(1*1024*1024)
+			data := RandomData(int(dataSize))
+
+			w.Write(data)
+			w.Flush()
+			w.Close()
+			f.Close()
+
+			f, err = Open(fname, os.O_RDONLY, fileType)
+			require.Nil(err)
+
+			success, err := CheckFileContentsMatch(f, data, true, 0)
+			if err != nil || !success {
+				require.Fail(fmt.Sprintf("Failed to verify file contents: %v", err))
+			}
+
+		}(bufSize)
+	}
+	wg.Wait()
+}
+func TestWriterGz(t *testing.T) {
+	t.Parallel()
+	testWriter(t, GZ_TRUE)
+}
+
+func TestWriterGzFalse(t *testing.T) {
+	t.Parallel()
+	testWriter(t, GZ_FALSE)
+}
+
+func TestWriterGzUnknown(t *testing.T) {
+	t.Parallel()
+	testWriter(t, GZ_UNKNOWN)
+}
+
+func TestBufferedWriter(t *testing.T) {
+	t.Skip("Debug test")
+	t.Parallel()
+
+	require := require.New(t)
+
+	// Test various bufsizes and data sizes
+	for bufSize := 32; bufSize < 16*1024; bufSize *= 2 {
+		for dataSize := 64; dataSize < 32*1024; dataSize *= 2 {
+			f := bytes.NewBuffer(nil)
+			buf := bufio.NewWriterSize(f, bufSize)
+			gzipWriter := gzip.NewWriter(buf)
+			data := RandomData(dataSize)
+			n, err := buf.Write(data)
+			require.Nil(err)
+			require.Equal(n, len(data))
+			gzipWriter.Flush()
+
+			readBuf := bytes.NewBuffer(f.Bytes())
+			reader, err := gzip.NewReader(readBuf)
+			require.Nil(err)
+
+			result := bytes.NewBuffer(nil)
+			io.Copy(result, reader)
+			require.Equal(data, result.Bytes())
+		}
+	}
+
 }
