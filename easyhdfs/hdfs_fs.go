@@ -3,6 +3,7 @@ package easyhdfs
 import (
 	"fmt"
 	"os"
+	"time"
 
 	"github.com/colinmarc/hdfs"
 	"github.com/gurupras/go-easyfiles"
@@ -11,20 +12,34 @@ import (
 )
 
 type hdfsFileSystem struct {
+	Addr   string
 	client *hdfs.Client
 }
 
+var (
+	HDFS_CONNECT_RETRY_LIMIT = 10
+)
+
 func NewHDFSFileSystem(addr string) *hdfsFileSystem {
-	client, err := hdfs.New(addr)
+	var client *hdfs.Client
+	var err error
+	for idx := 0; idx < HDFS_CONNECT_RETRY_LIMIT; idx++ {
+		client, err = hdfs.New(h.Addr)
+		if err != nil {
+			time.Sleep(30 * time.Millisecond)
+			continue
+		}
+		break
+	}
 	if err != nil {
 		log.Fatalf("Failed to get HDFS client: %v", err)
 		return nil
 	}
-	fs := &hdfsFileSystem{client}
+	fs := &hdfsFileSystem{addr, client}
 	return fs
 }
 
-func (h *hdfsFileSystem) getClient() (*hdfs.Client, error) {
+func (h *hdfsFileSystem) getClient() (client *hdfs.Client, err error) {
 	return h.client, nil
 }
 
