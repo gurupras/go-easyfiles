@@ -185,10 +185,14 @@ func (h *hdfsFileSystem) Exists(name string) (bool, error) {
 	}
 }
 
-func (h *hdfsFileSystem) Glob(pattern string) ([]string, error) {
+func (h *hdfsFileSystem) ReadDir(dirname string) ([]os.FileInfo, error) {
 	client, err := h.getClient()
 	if err != nil {
 		return nil, err
 	}
-	return hdfs_doublestar.Glob(client, pattern)
+	return client.ReadDir(dirname)
+}
+
+func (h *hdfsFileSystem) Glob(pattern string) ([]string, error) {
+	return hdfs_doublestar.Glob(h, pattern)
 }

@@ -12,4 +12,5 @@ type FileSystemInterface interface {
 	Makedirs(string) error
 	Exists(string) (bool, error)
 	Glob(string) ([]string, error)
+	ReadDir(string) ([]os.FileInfo, error)
 }

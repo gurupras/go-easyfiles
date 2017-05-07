@@ -47,3 +47,7 @@ func (l localFileSystem) Exists(name string) (bool, error) {
 func (l localFileSystem) Glob(pattern string) ([]string, error) {
 	return doublestar.Glob(pattern)
 }
+
+func (l localFileSystem) ReadDir(dirname string) ([]os.FileInfo, error) {
+	return ioutil.ReadDir(dirname)
+}
