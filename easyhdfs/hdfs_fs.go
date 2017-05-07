@@ -24,7 +24,7 @@ func NewHDFSFileSystem(addr string) *hdfsFileSystem {
 	var client *hdfs.Client
 	var err error
 	for idx := 0; idx < HDFS_CONNECT_RETRY_LIMIT; idx++ {
-		client, err = hdfs.New(h.Addr)
+		client, err = hdfs.New(addr)
 		if err != nil {
 			time.Sleep(30 * time.Millisecond)
 			continue
