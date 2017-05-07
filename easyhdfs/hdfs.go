@@ -1,6 +1,6 @@
 package easyhdfs
 
-import "github.com/colinmarc/hdfs"
+import "github.com/gurupras/hdfs"
 
 type HdfsFile struct {
 	Path string

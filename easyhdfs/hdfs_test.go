@@ -4,7 +4,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/colinmarc/hdfs"
+	"github.com/gurupras/hdfs"
 	"github.com/stretchr/testify/require"
 )
 

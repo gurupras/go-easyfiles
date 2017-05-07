@@ -5,9 +5,9 @@ import (
 	"os"
 	"time"
 
-	"github.com/colinmarc/hdfs"
 	"github.com/gurupras/go-easyfiles"
 	"github.com/gurupras/go-hdfs-doublestar"
+	"github.com/gurupras/hdfs"
 	log "github.com/sirupsen/logrus"
 )
 
